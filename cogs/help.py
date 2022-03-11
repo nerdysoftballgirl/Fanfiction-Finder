@@ -1,4 +1,5 @@
-from discord.ext.commands import command, Cog
+from discord.ext.commands import Cog
+from discord.commands import slash_command
 import discord
 import re
 
@@ -9,7 +10,7 @@ class Help(Cog):
     def __init__(self, client):
         self.client = client
 
-    @command()
+    @slash_command(description="To show the help menu for Fanfiction Finder Bot")
     async def help(self, ctx):
 
         try:
