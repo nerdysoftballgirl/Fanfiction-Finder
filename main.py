@@ -18,7 +18,7 @@ from utils.bot_uptime import start_server
 client = discord.Bot()
 
 load_dotenv()
-TOKEN = os.getenv('DISCORD_TOKEN')
+TOKEN = os.getenv('DISCORD_CANARY_TOKEN')
 OWNER_ID = os.getenv('OWNER_ID')
 URL_VALIDATE = r"(?:(?:https?|ftp)://)(?:\S+(?::\S*)?@)?(?:(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z\u00a1-\uffff0-9]+-?)*[a-z\u00a1-\uffff0-9]+)(?:\.(?:[a-z\u00a1-\uffff0-9]+-?)*[a-z\u00a1-\uffff0-9]+)*(?:\.(?:[a-z\u00a1-\uffff]{2,})))(?::\d{2,5})?(?:/[^\s]*)?"
 
@@ -26,36 +26,37 @@ with open("data/status_quotes.txt", "r") as file:
     quotes = cycle(file.readlines())
 
 
-@tasks.loop(seconds=1)
-async def bot_status():
-    """
-    An activity status which cycles through the
-    status_quotes.txt every 15s
-    """
+# @tasks.loop(seconds=1)
+# async def bot_status():
+#     """
+#     An activity status which cycles through the
+#     status_quotes.txt every 15s
+#     """
 
-    await client.wait_until_ready()
+#     await client.wait_until_ready()
 
-    await client.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name=(next(quotes)).strip()
-        )
-    )
+#     await client.change_presence(
+#         activity=discord.Activity(
+#             type=discord.ActivityType.watching,
+#             name=(next(quotes)).strip()
+#         )
+#     )
 
-    await asyncio.sleep(15)
+#     await asyncio.sleep(15)
 
 
 @client.slash_command(name="linkffn", description="To search for fanfiction in fanfiction.net")
-async def linkffn(ctx):
+async def linkffn(ctx, message):
     """
     To search for fanfiction in fanfiction.net
     """
+    log_flag = False
     try:
-        query = ctx.message.content.lower()
+        query = message.lower()
+        await ctx.defer()
 
-        log_flag = False
         if re.search("-log", query, re.IGNORECASE) \
-                and int(ctx.message.author.id) == int(OWNER_ID):
+                and int(ctx.author.id) == int(OWNER_ID):
 
             log_flag = True
 
@@ -72,29 +73,23 @@ async def linkffn(ctx):
                 f"data/logs/{request_id}.log",
                 format="{time:YYYY-MM-DD HH:mm:ss!UTC} | {level} | {file}:{function}:{line} - {message}")
 
-        # To run client.commands & client.event simultaneously
-        await client.process_commands(ctx.message)
-
-        if ctx.message.author == client.user:
+        if ctx.author == client.user:
             return  # Do not reply to yourself
 
-        if ctx.message.author.bot:
+        if ctx.author.bot:
             return  # Do not reply to other bots
 
-        msg = list(ctx.message.content.lower())
-
-        if ctx.message.guild is None:
+        if ctx.guild is None:
             logger.info("Not allowed to reply to DMs.")
             return  # Do not reply to DMs
 
         else:
 
             logger.info("linkffn command was used. Searching ffnet")
-            await ctx.message.channel.trigger_typing()
             logger.info("Sleeping for 1s to avoid ratelimit")
             await asyncio.sleep(1)
 
-            msg = msg.replace("-log", "")
+            msg = query.replace("-log", "")
 
             embed_pg = ffn_metadata(msg)
 
@@ -104,27 +99,28 @@ async def linkffn(ctx):
                 embed_pg = ao3_metadata(msg)
 
             logger.info(
-                f"Sending embed to Channel-> { ctx.message.channel.guild}:{ctx.message.channel.name}")
+                f"Sending embed to Channel-> { ctx.channel.guild}:{ctx.channel.name}")
             try:
-                sent_msg = await ctx.message.reply(embed=embed_pg, mention_author=False)
+                sent_msg = await ctx.respond(embed=embed_pg, mention_author=False)
             except Exception:
-                sent_msg = await ctx.message.channel.send(embed=embed_pg)
+                sent_msg = await ctx.channel.send(embed=embed_pg)
 
         if log_flag:
             try:
-                await ctx.message.reply(file=discord.File(
+                await message.reply(file=discord.File(
                     f"data/logs/{request_id}.log"
                 ), mention_author=False)
 
             except Exception:
-                await ctx.message.channel.send(file=discord.File(
+                await ctx.channel.send(file=discord.File(
                     f"data/logs/{request_id}.log"
                 ))
 
             # delete the log
             os.remove(f"data/logs/{request_id}.log")
 
-    except Exception:
+    except Exception as e:
+        print(e)
         if log_flag:
             # remove log if the bot is not allowed to send msgs to this channel
             os.remove(f"data/logs/{request_id}.log")
@@ -134,7 +130,7 @@ async def linkffn(ctx):
             def check(reaction, user):
                 return str(reaction.emoji) == '👎' and \
                     not user.bot and reaction.message.id == sent_msg.id and \
-                    user.id == ctx.message.author.id
+                    user.id == ctx.author.id
 
             await client.wait_for('reaction_add',
                                   check=check, timeout=30.0)
@@ -145,16 +141,17 @@ async def linkffn(ctx):
 
 
 @client.slash_command()
-async def linkao3(ctx):
+async def linkao3(ctx, message):
     """
     To search for fanfiction in archiveofourown.org
     """
+    log_flag = False
     try:
-        query = ctx.message.content.lower()
+        query = message.lower()
+        await ctx.defer()
 
-        log_flag = False
         if re.search("-log", query, re.IGNORECASE) \
-                and int(ctx.message.author.id) == int(OWNER_ID):
+                and int(ctx.author.id) == int(OWNER_ID):
 
             log_flag = True
 
@@ -171,29 +168,23 @@ async def linkao3(ctx):
                 f"data/logs/{request_id}.log",
                 format="{time:YYYY-MM-DD HH:mm:ss!UTC} | {level} | {file}:{function}:{line} - {message}")
 
-        # To run client.commands & client.event simultaneously
-        await client.process_commands(ctx.message)
-
-        if ctx.message.author == client.user:
+        if ctx.author == client.user:
             return  # Do not reply to yourself
 
-        if ctx.message.author.bot:
+        if ctx.author.bot:
             return  # Do not reply to other bots
 
-        msg = list(ctx.message.content.lower())
-
-        if ctx.message.guild is None:
+        if ctx.guild is None:
             logger.info("Not allowed to reply to DMs.")
             return  # Do not reply to DMs
 
         else:
 
             logger.info("linkao3 command was used. Searching ao3")
-            await ctx.message.channel.trigger_typing()
             logger.info("Sleeping for 1s to avoid ratelimit")
             await asyncio.sleep(1)
 
-            msg = msg.replace("-log", "")
+            msg = query.replace("-log", "")
 
             embed_pg = ao3_metadata(msg)
 
@@ -203,27 +194,28 @@ async def linkao3(ctx):
                 embed_pg = ffn_metadata(msg)
 
             logger.info(
-                f"Sending embed to Channel-> { ctx.message.channel.guild}:{ctx.message.channel.name}")
+                f"Sending embed to Channel-> { ctx.channel.guild}:{ctx.channel.name}")
             try:
-                sent_msg = await ctx.message.reply(embed=embed_pg, mention_author=False)
+                sent_msg = await ctx.respond(embed=embed_pg, mention_author=False)
             except Exception:
-                sent_msg = await ctx.message.channel.send(embed=embed_pg)
+                sent_msg = await ctx.channel.send(embed=embed_pg)
 
         if log_flag:
             try:
-                await ctx.message.reply(file=discord.File(
+                await ctx.reply(file=discord.File(
                     f"data/logs/{request_id}.log"
                 ), mention_author=False)
 
             except Exception:
-                await ctx.message.channel.send(file=discord.File(
+                await ctx.channel.send(file=discord.File(
                     f"data/logs/{request_id}.log"
                 ))
 
             # delete the log
             os.remove(f"data/logs/{request_id}.log")
 
-    except Exception:
+    except Exception as e:
+        print(e)
         if log_flag:
             # remove log if the bot is not allowed to send msgs to this channel
             os.remove(f"data/logs/{request_id}.log")
@@ -233,7 +225,7 @@ async def linkao3(ctx):
             def check(reaction, user):
                 return str(reaction.emoji) == '👎' and \
                     not user.bot and reaction.message.id == sent_msg.id and \
-                    user.id == ctx.message.author.id
+                    user.id == ctx.author.id
 
             await client.wait_for('reaction_add',
                                   check=check, timeout=30.0)
@@ -243,7 +235,7 @@ async def linkao3(ctx):
             pass
 
 
-bot_status.start()
+# bot_status.start()
 start_server()
 client.load_extension("cogs.settings")
 client.load_extension("cogs.help")
